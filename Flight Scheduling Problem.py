@@ -30,7 +30,7 @@ We chose this methode over the edge crossover method as adjacency is not as impo
 
 
 def partially_mapped_crossover(parent1, parent2):
-    """cut-and-crossfill crossover for permutation representations"""
+    """Partially mapped crossover to keep the representation valid (No repeat planes)"""
 
     parent_size = len(parent1)
     
@@ -88,3 +88,25 @@ def partially_mapped_crossover(parent1, parent2):
             offspring2[i] = parent1[i]
                 
     return offspring1, offspring2
+
+
+def survivor_selection(offspring, mu, population):
+    """
+    Do NSGA II fast sorting and NSGA II crowding.
+
+    Parameters:
+        offspring (np.array): Generated offspring. A list of lambd lists of dim floats.
+        mu (int): Number of individuals in population.
+        population (np.array): Initialized population. A list of mu lists of dim floats.
+        
+    Returns:
+        population (np.array): Initialized population. A list of mu lists of dim floats.
+        sigma (np.array): Initialized sigmas. A single int which pairs with population via index.
+    """
+
+    # student code begins
+    combined = population + offspring
+
+    # student code ends
+    
+    return population
