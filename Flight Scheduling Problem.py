@@ -103,10 +103,45 @@ def survivor_selection(offspring, mu, population):
         population (np.array): Initialized population. A list of mu lists of dim floats.
         sigma (np.array): Initialized sigmas. A single int which pairs with population via index.
     """
+    combined_population = population + offspring
 
-    # student code begins
-    combined = population + offspring
+    sorted_population = compute_pareto_fronts(combined_population)
 
-    # student code ends
+    new_population = []
+
+    for front in sorted_population:
+        if (len(new_population)+ len(front)) <= mu:
+            new_population += front
+        else:
+            remaining = mu - len(new_population)
+            sorted_front = compute_crowding_distace(front)
+            new_population += sorted_front[:remaining]
+            break
     
-    return population
+    return new_population
+
+def parent_selection(population):
+    """Binary Tournament selection like done in the NSGA II paper"""
+
+    individual_1 = random.choice(population)
+    individual_2 = random.choice(population)
+
+    if individual_1.front < individual_2.front:
+        selected = individual_1
+    elif individual_1.front > individual_2.front:
+        selected = individual_2
+    else:
+        if individual_1.crowding > individual_2.crowding:
+            selected = individual_1
+        elif individual_1.crowding < individual_2.crowding:
+            selected = individual_2
+        else:
+            selected = random.choice([individual_1, individual_2])
+
+    return selected
+
+def compute_pareto_fronts(population):
+    pass
+
+def compute_crowding_distace(front):
+    pass
