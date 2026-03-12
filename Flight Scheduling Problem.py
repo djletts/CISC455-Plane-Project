@@ -141,6 +141,43 @@ def parent_selection(population):
     return selected
 
 def compute_pareto_fronts(population):
+    dominations = {i: [] for i in population}
+    unassigned = population.copy()
+    front_list = []
+
+    for i in population:
+        for j in population:
+            if i != j:
+                if dominates(i,j):
+                    dominations[j].append(i)
+
+    while len(unassigned) != 0:
+        front = []
+
+        # Find all unassigned individuals not dominated by any other unassigned individual
+        for ind in unassigned:
+            if len(dominations[ind]) == 0:
+                front.append(ind)
+
+        # Remove front members from unassigned
+        for ind in front:
+            unassigned.remove(ind)
+
+        # Remove front members from domination lists of remaining individuals
+        for ind in unassigned:
+            for f in front:
+                if f in dominations[ind]:
+                    dominations[ind].remove(f)
+
+        front_list.append(front)
+    
+    for i in range(len(front_list)):
+        for j in front_list[i]:
+            j.front = i + 1
+    
+    return front_list
+
+def dominates(ind1, ind2):
     pass
 
 def compute_crowding_distace(front):
