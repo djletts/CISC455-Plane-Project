@@ -1,6 +1,15 @@
-
 import random
 import numpy
+
+
+class plane:
+    def init(self, time_arrival, num_people_on_plane, time_till_next_plane):
+            self.arrival = time_arrival
+            self.occupants = num_people_on_plane
+            self.time_taken = time_till_next_plane
+            self.time_landed = None
+            self.crowding = None
+            self.front = None
 
 """
 Mutation methods
@@ -182,3 +191,43 @@ def dominates(ind1, ind2):
 
 def compute_crowding_distace(front):
     pass
+
+"""def fitness(individual):
+
+    delay, occupants_delayed = compute_multi_objectives(individual)
+
+    w_delay = 1.0
+    w_occupants = 1.0
+
+    weighted_cost = w_delay * delay + w_occupants * occupants_delayed
+
+    scalar_fitness = 1.0 / (1.0 + weighted_cost)
+
+    return scalar_fitness
+"""
+
+def compute_multi_objectives(individual):
+
+    total_delay = 0
+    occupants_delayed = 0
+    
+
+    schedule = [plane(x.arrival, x.occupants, x.time_taken) for x in individual]
+
+    for i in range(len(schedule)):
+        if i == 0:
+            schedule[i].time_landed = schedule[i].arrival
+
+        else:
+            if schedule[i].arrival >= schedule[i - 1].time_landed + schedule[i - 1].time_taken:
+                schedule[i].time_landed = schedule[i].arrival
+            else:
+                schedule[i].time_landed = schedule[i - 1].time_landed + schedule[i - 1].time_taken
+
+        # compute delay for this plane (0 if on time)
+        this_delay = max(0, schedule[i].time_landed - schedule[i].arrival)
+        if this_delay > 0:
+            total_delay += this_delay
+            occupants_delayed += schedule[i].occupants
+
+    return total_delay, occupants_delayed
