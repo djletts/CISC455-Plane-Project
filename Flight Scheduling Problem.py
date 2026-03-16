@@ -1,5 +1,5 @@
 import random
-import numpy
+import numpy as np
 
 
 class Plane:
@@ -47,7 +47,10 @@ We chose this methode over the edge crossover method as adjacency is not as impo
 def partially_mapped_crossover(parent1, parent2):
     """Partially mapped crossover to keep the representation valid (No repeat planes)"""
 
-    parent_size = len(parent1)
+    p1 = parent1.genome
+    p2 = parent2.genome
+
+    parent_size = len(p1)
     
     offspring1 = [None]*parent_size
     offspring2 = [None]*parent_size
@@ -55,21 +58,21 @@ def partially_mapped_crossover(parent1, parent2):
     random_cut_index1 = random.randint(0, parent_size-1)
     random_cut_index2 = random.randint(random_cut_index1 + 1, parent_size)
     
-    offspring1[random_cut_index1:random_cut_index2] = parent1[random_cut_index1:random_cut_index2]
-    offspring2[random_cut_index1:random_cut_index2] = parent2[random_cut_index1:random_cut_index2]
+    offspring1[random_cut_index1:random_cut_index2] = p1[random_cut_index1:random_cut_index2]
+    offspring2[random_cut_index1:random_cut_index2] = p2[random_cut_index1:random_cut_index2]
     
 
     # Get middle segment from P2 placed for offspring 1
     for i in range(random_cut_index1, random_cut_index2):
         item_placed = False
-        item = parent2[i]
+        item = p2[i]
 
         if item not in offspring1:
             index = i
             
             while not item_placed:
-                mapped_item = parent1[index]
-                index = parent2.index(mapped_item)
+                mapped_item = p1[index]
+                index = p2.index(mapped_item)
 
                 if offspring1[index] is None:
                     offspring1[index] = item
@@ -78,20 +81,20 @@ def partially_mapped_crossover(parent1, parent2):
     # Place rest of P2 for offspring 1
     for i in range(parent_size):
         if offspring1[i] is None:
-            offspring1[i] = parent2[i]
+            offspring1[i] = p2[i]
 
     
     # Get middle segment from P1 placed for offspring 2
     for i in range(random_cut_index1, random_cut_index2):
         item_placed = False
-        item = parent1[i]
+        item = p1[i]
 
         if item not in offspring2:
             index = i
             
             while not item_placed:
-                mapped_item = parent2[index]
-                index = parent1.index(mapped_item)
+                mapped_item = p2[index]
+                index = p1.index(mapped_item)
 
                 if offspring2[index] is None:
                     offspring2[index] = item
@@ -100,7 +103,7 @@ def partially_mapped_crossover(parent1, parent2):
     # Place rest of P1 for offspring 2
     for i in range(parent_size):
         if offspring2[i] is None:
-            offspring2[i] = parent1[i]
+            offspring2[i] = p1[i]
                 
     return Individual(offspring1), Individual(offspring2)
 
@@ -128,11 +131,11 @@ def survivor_selection(offspring, mu, population):
     new_population = []
 
     for front in sorted_population:
+        sorted_front = compute_crowding_distance(front)
         if (len(new_population)+ len(front)) <= mu:
             new_population += front
         else:
             remaining = mu - len(new_population)
-            sorted_front = compute_crowding_distance(front)
             new_population += sorted_front[:remaining]
             break
     
@@ -206,13 +209,44 @@ def dominates(ind1, ind2):
     ind1_objectives = ind1.objectives
     ind2_objectives = ind2.objectives
 
-    no_worse = ind1_objectives[0] < ind2_objectives[0] and ind1_objectives[1] < ind2_objectives[1]
+    no_worse = ind1_objectives[0] <= ind2_objectives[0] and ind1_objectives[1] <= ind2_objectives[1]
     better_in_one = ind1_objectives[0] < ind2_objectives[0] or ind1_objectives[1] < ind2_objectives[1]
 
     return no_worse and better_in_one
 
 def compute_crowding_distance(front):
-    pass
+    """
+    Return the front sorted from most diverse to least diverse
+    """
+    
+    num_individuals = len(front)
+
+    for i in front:
+        i.crowding = 0
+    
+    if num_individuals == 0:
+        return []
+    elif num_individuals == 1:
+        front[0].crowding = float("inf")
+        return front
+    elif num_individuals == 2:
+        front[0].crowding = float("inf")
+        front[1].crowding = float("inf")
+        return front
+    else:
+        for j in range(2):
+            sorted_front = sorted(front, key=lambda ind: ind.objectives[j])
+            sorted_front[0].crowding = float("inf")
+            sorted_front[-1].crowding = float("inf")
+
+            # skip the objective if the denominator will be 0
+            if sorted_front[-1].objectives[j] - sorted_front[0].objectives[j] == 0:
+                continue
+            
+            for k in range (1, num_individuals-1):
+                sorted_front[k].crowding += (sorted_front[k + 1].objectives[j] - sorted_front[k - 1].objectives[j]) / (sorted_front[-1].objectives[j] - sorted_front[0].objectives[j])
+        
+        return sorted(front, key=lambda ind: ind.crowding, reverse=True)
 
 def compute_multi_objectives(individual):
 
@@ -246,7 +280,7 @@ def permutation(pop_size, planes_list):
     population = []
 
     for i in range(pop_size):
-        genome = list(numpy.random.permutation(planes_list))
+        genome = list(np.random.permutation(planes_list))
         population.append(Individual(genome))
 
     return population
