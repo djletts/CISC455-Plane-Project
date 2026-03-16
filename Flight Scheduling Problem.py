@@ -199,7 +199,17 @@ def compute_pareto_fronts(population):
     return front_list
 
 def dominates(ind1, ind2):
-    pass
+    """
+    Return True ind1 dominates ind2, return false otherwise
+    """
+
+    ind1_objectives = ind1.objectives
+    ind2_objectives = ind2.objectives
+
+    no_worse = ind1_objectives[0] < ind2_objectives[0] and ind1_objectives[1] < ind2_objectives[1]
+    better_in_one = ind1_objectives[0] < ind2_objectives[0] or ind1_objectives[1] < ind2_objectives[1]
+
+    return no_worse and better_in_one
 
 def compute_crowding_distance(front):
     pass
