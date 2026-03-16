@@ -3,6 +3,22 @@ import numpy as np
 
 
 class Plane:
+    """
+    Represent a plane arriving at the airport.
+
+    Parameters:
+        time_arrival (int): Scheduled arrival time of the plane.
+        num_people_on_plane (int): Number of passengers on the plane.
+        time_till_next_plane (int): Minimum separation time before the next plane can land.
+        plane_size (str): Category or size of the plane.
+
+    Attributes:
+        arrival (int): Scheduled arrival time.
+        occupants (int): Number of passengers on the plane.
+        time_taken (int): Required separation time after landing.
+        plane_type (str): Type or size category of the plane.
+        time_landed (int or None): Actual landing time assigned during scheduling.
+    """
     def __init__(self, time_arrival, num_people_on_plane, time_till_next_plane, plane_size):
         self.arrival = time_arrival
         self.occupants = num_people_on_plane
@@ -12,6 +28,20 @@ class Plane:
             
             
 class Individual:
+    """
+    Represent a candidate solution in the genetic algorithm.
+
+    Parameters:
+        genome (list): Permutation of Plane objects representing a landing schedule.
+
+    Attributes:
+        genome (list): Ordered list of Plane objects defining the landing sequence.
+        objectives (tuple or None): Objective values for the individual (e.g., total delay,
+                                    number of passengers delayed).
+        front (int or None): Pareto front rank assigned during non-dominated sorting.
+        crowding (float): Crowding distance used to maintain diversity in NSGA-II.
+    """
+    
     def __init__(self, genome):
         self.crowding = 0
         self.front = None
@@ -26,7 +56,15 @@ changes while keeping a valid solution.
 """
 
 def swap_mutation(individual):
-    """Mutate a permutation"""
+    """
+    Perform swap mutation on an Individual.
+
+    Parameters:
+        individual (Individual): Individual whose genome is a permutation of Plane objects.
+
+    Returns:
+        mutant (Individual): New Individual with two randomly selected planes swapped.
+    """
 
     mutant = individual.genome.copy()
 
@@ -45,7 +83,17 @@ We chose this methode over the edge crossover method as adjacency is not as impo
 
 
 def partially_mapped_crossover(parent1, parent2):
-    """Partially mapped crossover to keep the representation valid (No repeat planes)"""
+    """
+    Perform partially mapped crossover (PMX) between two parents.
+
+    Parameters:
+        parent1 (Individual): First parent Individual whose genome is a permutation of Plane objects.
+        parent2 (Individual): Second parent Individual whose genome is a permutation of Plane objects.
+
+    Returns:
+        offspring1 (Individual): First offspring Individual produced from crossover.
+        offspring2 (Individual): Second offspring Individual produced from crossover.
+    """
 
     p1 = parent1.genome
     p2 = parent2.genome
@@ -110,16 +158,15 @@ def partially_mapped_crossover(parent1, parent2):
 
 def survivor_selection(offspring, mu, population):
     """
-    Do NSGA II fast sorting and NSGA II crowding.
+    Perform survivor selection using NSGA-II fast non-dominated sorting and crowding distance.
 
     Parameters:
-        offspring (np.array): Generated offspring. A list of lambd lists of dim floats.
-        mu (int): Number of individuals in population.
-        population (np.array): Initialized population. A list of mu lists of dim floats.
-        
+        offspring (list): List of newly generated Individuals.
+        mu (int): Maximum number of Individuals allowed in the population.
+        population (list): Current population of Individuals.
+
     Returns:
-        population (np.array): Initialized population. A list of mu lists of dim floats.
-        sigma (np.array): Initialized sigmas. A single int which pairs with population via index.
+        new_population (list): Next generation population containing mu Individuals.
     """
     combined_population = population + offspring
 
@@ -142,7 +189,15 @@ def survivor_selection(offspring, mu, population):
     return new_population
 
 def parent_selection(population):
-    """Binary Tournament selection like done in the NSGA II paper"""
+    """
+    Select a parent using binary tournament selection.
+
+    Parameters:
+        population (list): Current population of Individuals.
+
+    Returns:
+        selected (Individual): Selected parent Individual based on Pareto rank and crowding distance.
+    """
 
     individual_1 = random.choice(population)
     individual_2 = random.choice(population)
@@ -162,6 +217,16 @@ def parent_selection(population):
     return selected
 
 def compute_pareto_fronts(population):
+    """
+    Compute Pareto fronts using fast non-dominated sorting.
+
+    Parameters:
+        population (list): List of Individuals whose objective values have been computed.
+
+    Returns:
+        front_list (list): List of Pareto fronts, where each front is a list of Individuals.
+    """
+
     dominations = {i: [] for i in population}
     unassigned = population.copy()
     front_list = []
@@ -203,7 +268,14 @@ def compute_pareto_fronts(population):
 
 def dominates(ind1, ind2):
     """
-    Return True ind1 dominates ind2, return false otherwise
+    Determine whether one Individual dominates another.
+
+    Parameters:
+        ind1 (Individual): First Individual being compared.
+        ind2 (Individual): Second Individual being compared.
+
+    Returns:
+        dominates (bool): True if ind1 dominates ind2, False otherwise.
     """
 
     ind1_objectives = ind1.objectives
@@ -216,7 +288,14 @@ def dominates(ind1, ind2):
 
 def compute_crowding_distance(front):
     """
-    Return the front sorted from most diverse to least diverse
+    Compute crowding distance for Individuals in the same Pareto front.
+
+    Parameters:
+        front (list): List of Individuals belonging to the same Pareto front.
+
+    Returns:
+        sorted_front (list): List of Individuals sorted from highest crowding distance
+                            (most diverse) to lowest crowding distance.
     """
     
     num_individuals = len(front)
@@ -249,6 +328,17 @@ def compute_crowding_distance(front):
         return sorted(front, key=lambda ind: ind.crowding, reverse=True)
 
 def compute_multi_objectives(individual):
+    """
+    Compute the objective values for an Individual.
+
+    Parameters:
+        individual (Individual): Individual whose genome represents a landing schedule.
+
+    Returns:
+        objectives (tuple): Tuple containing:
+            total_delay (int): Total delay across all planes.
+            occupants_delayed (int): Total number of passengers affected by delays.
+    """
 
     total_delay = 0
     occupants_delayed = 0
@@ -275,7 +365,16 @@ def compute_multi_objectives(individual):
     return total_delay, occupants_delayed
 
 def permutation(pop_size, planes_list):
-    """initialize a population of permutations"""
+    """
+    Initialize a population of Individuals using random permutations.
+
+    Parameters:
+        pop_size (int): Number of Individuals to generate.
+        planes_list (list): List of Plane objects to be permuted.
+
+    Returns:
+        population (list): List of Individuals with randomly permuted genomes.
+    """
 
     population = []
 
