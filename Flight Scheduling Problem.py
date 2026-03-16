@@ -2,14 +2,21 @@ import random
 import numpy
 
 
-class plane:
-    def init(self, time_arrival, num_people_on_plane, time_till_next_plane):
-            self.arrival = time_arrival
-            self.occupants = num_people_on_plane
-            self.time_taken = time_till_next_plane
-            self.time_landed = None
-            self.crowding = None
-            self.front = None
+class Plane:
+    def __init__(self, time_arrival, num_people_on_plane, time_till_next_plane, plane_size):
+        self.arrival = time_arrival
+        self.occupants = num_people_on_plane
+        self.time_taken = time_till_next_plane
+        self.plane_type = plane_size
+        self.time_landed = None
+            
+            
+class Individual:
+    def __init__(self, genome):
+        self.crowding = 0
+        self.front = None
+        self.objectives = None
+        self.genome = genome # List of plane objects
 
 """
 Mutation methods
@@ -18,18 +25,17 @@ The mutation we chose to implement is Swap mutaiton. this is the best option as 
 changes while keeping a valid solution.
 """
 
-
 def swap_mutation(individual):
     """Mutate a permutation"""
 
-    mutant = individual.copy()
+    mutant = individual.genome.copy()
 
     random_1 = random.randint(0, len(mutant) - 1)
     random_2 = random.randint(0, len(mutant) - 1)
 
     mutant[random_1], mutant[random_2] = mutant[random_2], mutant[random_1]
 
-    return mutant
+    return Individual(mutant)
 
 
 """
@@ -96,7 +102,7 @@ def partially_mapped_crossover(parent1, parent2):
         if offspring2[i] is None:
             offspring2[i] = parent1[i]
                 
-    return offspring1, offspring2
+    return Individual(offspring1), Individual(offspring2)
 
 
 def survivor_selection(offspring, mu, population):
@@ -114,6 +120,9 @@ def survivor_selection(offspring, mu, population):
     """
     combined_population = population + offspring
 
+    for ind in combined_population:
+        ind.objectives = compute_multi_objectives(ind)
+
     sorted_population = compute_pareto_fronts(combined_population)
 
     new_population = []
@@ -123,7 +132,7 @@ def survivor_selection(offspring, mu, population):
             new_population += front
         else:
             remaining = mu - len(new_population)
-            sorted_front = compute_crowding_distace(front)
+            sorted_front = compute_crowding_distance(front)
             new_population += sorted_front[:remaining]
             break
     
@@ -168,6 +177,9 @@ def compute_pareto_fronts(population):
             if len(dominations[ind]) == 0:
                 front.append(ind)
 
+        if len(front) == 0:
+            break
+
         # Remove front members from unassigned
         for ind in front:
             unassigned.remove(ind)
@@ -189,22 +201,8 @@ def compute_pareto_fronts(population):
 def dominates(ind1, ind2):
     pass
 
-def compute_crowding_distace(front):
+def compute_crowding_distance(front):
     pass
-
-"""def fitness(individual):
-
-    delay, occupants_delayed = compute_multi_objectives(individual)
-
-    w_delay = 1.0
-    w_occupants = 1.0
-
-    weighted_cost = w_delay * delay + w_occupants * occupants_delayed
-
-    scalar_fitness = 1.0 / (1.0 + weighted_cost)
-
-    return scalar_fitness
-"""
 
 def compute_multi_objectives(individual):
 
@@ -212,7 +210,7 @@ def compute_multi_objectives(individual):
     occupants_delayed = 0
     
 
-    schedule = [plane(x.arrival, x.occupants, x.time_taken) for x in individual]
+    schedule = [Plane(x.arrival, x.occupants, x.time_taken, x.plane_type) for x in individual.genome]
 
     for i in range(len(schedule)):
         if i == 0:
@@ -231,3 +229,14 @@ def compute_multi_objectives(individual):
             occupants_delayed += schedule[i].occupants
 
     return total_delay, occupants_delayed
+
+def permutation(pop_size, planes_list):
+    """initialize a population of permutations"""
+
+    population = []
+
+    for i in range(pop_size):
+        genome = list(numpy.random.permutation(planes_list))
+        population.append(Individual(genome))
+
+    return population
