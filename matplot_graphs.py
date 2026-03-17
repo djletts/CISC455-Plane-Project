@@ -425,46 +425,73 @@ def permutation(pop_size, planes_list):
     return population
 
 def main():
-    # Generate a larger set of planes.
+    # Generate a set of planes
     num_planes = 50
-    interval = 10  # minutes between scheduled arrivals
+    interval = 10
     sizes = ["Small", "Medium", "Large"]
 
-    # seed for reproducible occupant numbers
     random.seed(42)
 
     planes = []
     for i in range(num_planes):
-        #arrival = i * interval
-        #arrival = max(0, i * interval)
+        #rrival = i * interval
         arrival = random.randint(0, num_planes * 5)
         size = sizes[i % len(sizes)]
         occupants = random.randint(40, 220)
         planes.append(Plane(arrival, occupants, size))
-    # GA parameters you can tune
+
+    # GA parameters
     pop_size = 30
-    generations = 10000
+    generations = 5000
     crossover_prob = 0.9
     mutation_prob = 0.2
 
-    # initialize population
+    # History for graphing improvement over time
+    best_delay_history = []
+    best_passenger_history = []
+    best_front_size_history = []
+
+    # Initialize population
     population = permutation(pop_size, planes)
 
-    # evaluate initial population
+    # Evaluate initial population
     for ind in population:
         ind.objectives = compute_multi_objectives(ind)
 
-    # evolutionary loop
+    # Evolutionary loop
     for gen in range(1, generations + 1):
-        # ensure Pareto front ranks and crowding distances are set before selection
+        # Compute fronts and crowding before parent selection
         fronts = compute_pareto_fronts(population)
         for f in fronts:
-            # compute_crowding_distance sets .crowding on members
-            _ = compute_crowding_distance(f)
+            compute_crowding_distance(f)
+
+        best_front = fronts[0]
+
+        # Track progress
+        best_delay = min(ind.objectives[0] for ind in best_front)
+        best_passengers = min(ind.objectives[1] for ind in best_front)
+
+        best_delay_history.append(best_delay)
+        best_passenger_history.append(best_passengers)
+        best_front_size_history.append(len(best_front))
+
+        # Print progress every 50 generations
+        if gen % 50 == 0 or gen == 1 or gen == generations:
+            sample1 = best_front[0].objectives
+            sample2 = best_front[1].objectives if len(best_front) > 1 else best_front[0].objectives
+            print(
+                f"Generation {gen}: Best front size={len(best_front)}, "
+                f"sample objectives={sample1}, sample objectives2={sample2}"
+            )
+
+        # Stop if optimal found
+        if best_delay == 0 and best_passengers == 0:
+            print(f"Optimal solution found at generation {gen}.")
+            break
 
         offspring = []
 
-        # create offspring until we have pop_size children
+        # Create offspring until we have pop_size children
         while len(offspring) < pop_size:
             parent1 = parent_selection(population)
             parent2 = parent_selection(population)
@@ -475,7 +502,6 @@ def main():
                 child1 = Individual(parent1.genome.copy())
                 child2 = Individual(parent2.genome.copy())
 
-            # mutation
             if random.random() <= mutation_prob:
                 child1 = swap_mutation(child1)
             if random.random() <= mutation_prob:
@@ -483,25 +509,17 @@ def main():
 
             offspring.extend([child1, child2])
 
-        # trim offspring to desired size
+        # Trim offspring to desired size
         offspring = offspring[:pop_size]
 
-        # survivor selection
+        # Survivor selection
         population = survivor_selection(offspring, pop_size, population)
 
-        # print progress every 50 generations
-        if gen % 50 == 0 or gen == 1 or gen == generations:
-            # evaluate and show best front summary
-            for ind in population:
-                ind.objectives = compute_multi_objectives(ind)
-            fronts = compute_pareto_fronts(population)
-            best_front = fronts[0]
-            print(f"Generation {gen}: Best front size={len(best_front)}, sample objectives={best_front[0].objectives}, sample objectives2={best_front[-1].objectives}")
-        if best_front[0].objectives[0] == 0 and best_front[0].objectives[1] == 0:
-            print(f"Optimal solution found at generation {gen}.")
-            break
+        # Recompute objectives after survivor selection
+        for ind in population:
+            ind.objectives = compute_multi_objectives(ind)
 
-    # final evaluation and print full fronts
+    # Final evaluation
     for ind in population:
         ind.objectives = compute_multi_objectives(ind)
 
@@ -512,26 +530,113 @@ def main():
         print(f"Front {front[0].front}:")
         for ind in sorted_front:
             print(f"Objectives: {ind.objectives}, Crowding Distance: {ind.crowding}")
-        # Print detailed schedule for the best individual in this front
+
         if len(sorted_front) > 0:
             best = sorted_front[0]
             schedule = [Plane(x.arrival, x.occupants, x.plane_type) for x in best.genome]
-            # compute landing times using separation_time
+
             for i in range(len(schedule)):
                 if i == 0:
                     schedule[i].time_landed = schedule[i].arrival
                 else:
-                    req_sep = separation_time(schedule[i-1].plane_type, schedule[i].plane_type)
-                    if schedule[i].arrival >= schedule[i-1].time_landed + req_sep:
+                    req_sep = separation_time(schedule[i - 1].plane_type, schedule[i].plane_type)
+                    if schedule[i].arrival >= schedule[i - 1].time_landed + req_sep:
                         schedule[i].time_landed = schedule[i].arrival
                     else:
-                        schedule[i].time_landed = schedule[i-1].time_landed + req_sep
+                        schedule[i].time_landed = schedule[i - 1].time_landed + req_sep
 
             print("Schedule (arrival -> landed) and per-plane delay:")
             for p in schedule:
                 arrival_s = minutes_to_military(p.arrival)
                 landed_s = minutes_to_military(p.time_landed) if p.time_landed is not None else "--:--"
                 delay = max(0, p.time_landed - p.arrival) if p.time_landed is not None else 0
-                print(f"  {arrival_s} -> {landed_s} | Delay: {delay} min | Type: {p.plane_type}, Occupants: {p.occupants}")
+                print(
+                    f"  {arrival_s} -> {landed_s} | Delay: {delay} min | "
+                    f"Type: {p.plane_type}, Occupants: {p.occupants}"
+                )
+
+            best = sorted_front[1]
+            schedule = [Plane(x.arrival, x.occupants, x.plane_type) for x in best.genome]
+
+            for i in range(len(schedule)):
+                if i == 0:
+                    schedule[i].time_landed = schedule[i].arrival
+                else:
+                    req_sep = separation_time(schedule[i - 1].plane_type, schedule[i].plane_type)
+                    if schedule[i].arrival >= schedule[i - 1].time_landed + req_sep:
+                        schedule[i].time_landed = schedule[i].arrival
+                    else:
+                        schedule[i].time_landed = schedule[i - 1].time_landed + req_sep
+
+            print("Schedule (arrival -> landed) and per-plane delay:")
+            for p in schedule:
+                arrival_s = minutes_to_military(p.arrival)
+                landed_s = minutes_to_military(p.time_landed) if p.time_landed is not None else "--:--"
+                delay = max(0, p.time_landed - p.arrival) if p.time_landed is not None else 0
+                print(
+                    f"  {arrival_s} -> {landed_s} | Delay: {delay} min | "
+                    f"Type: {p.plane_type}, Occupants: {p.occupants}"
+                )
+
+            best = sorted_front[-1]
+            schedule = [Plane(x.arrival, x.occupants, x.plane_type) for x in best.genome]
+
+            for i in range(len(schedule)):
+                if i == 0:
+                    schedule[i].time_landed = schedule[i].arrival
+                else:
+                    req_sep = separation_time(schedule[i - 1].plane_type, schedule[i].plane_type)
+                    if schedule[i].arrival >= schedule[i - 1].time_landed + req_sep:
+                        schedule[i].time_landed = schedule[i].arrival
+                    else:
+                        schedule[i].time_landed = schedule[i - 1].time_landed + req_sep
+
+            print("Schedule (arrival -> landed) and per-plane delay:")
+            for p in schedule:
+                arrival_s = minutes_to_military(p.arrival)
+                landed_s = minutes_to_military(p.time_landed) if p.time_landed is not None else "--:--"
+                delay = max(0, p.time_landed - p.arrival) if p.time_landed is not None else 0
+                print(
+                    f"  {arrival_s} -> {landed_s} | Delay: {delay} min | "
+                    f"Type: {p.plane_type}, Occupants: {p.occupants}"
+                )
+
+            break  # only print detailed schedule for the first front
+
+    # Graph improvement over time
+    import matplotlib.pyplot as plt
+
+    plt.figure()
+    plt.plot(best_delay_history, label="Best Total Delay")
+    plt.plot(best_passenger_history, label="Best Passengers Delayed")
+    plt.xlabel("Generation")
+    plt.ylabel("Objective Value")
+    plt.title("Improvement Over Time")
+    plt.legend()
+    plt.show()
+
+    # Graph front 1 size over time
+    plt.figure()
+    plt.plot(best_front_size_history, label="Front 1 Size")
+    plt.xlabel("Generation")
+    plt.ylabel("Number of Individuals")
+    plt.title("Front 1 Size Over Time")
+    plt.legend()
+    plt.show()
+
+    # Final Pareto front scatter plot
+    final_front = sorted_population[0]
+    x_vals = [ind.objectives[0] for ind in final_front]
+    y_vals = [ind.objectives[1] for ind in final_front]
+
+    plt.figure()
+    plt.scatter(x_vals, y_vals)
+    plt.xlabel("Total Delay")
+    plt.ylabel("Passengers Delayed")
+    plt.title("Final Pareto Front")
+    plt.show()
+
+
+
 
 main()
