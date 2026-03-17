@@ -1,6 +1,7 @@
 import random
 import numpy as np
 
+# extra minutes to add to every required separation (increase delays)
 
 class Plane:
     """
@@ -15,14 +16,12 @@ class Plane:
     Attributes:
         arrival (int): Scheduled arrival time.
         occupants (int): Number of passengers on the plane.
-        time_taken (int): Required separation time after landing.
         plane_type (str): Type or size category of the plane.
         time_landed (int or None): Actual landing time assigned during scheduling.
     """
-    def __init__(self, time_arrival, num_people_on_plane, time_till_next_plane, plane_size):
+    def __init__(self, time_arrival, num_people_on_plane, plane_size):
         self.arrival = time_arrival
         self.occupants = num_people_on_plane
-        self.time_taken = time_till_next_plane
         self.plane_type = plane_size
         self.time_landed = None
             
@@ -327,6 +326,37 @@ def compute_crowding_distance(front):
         
         return sorted(front, key=lambda ind: ind.crowding, reverse=True)
 
+
+def separation_time(prev_size, curr_size):
+    """
+    Return required separation time (in minutes) between two planes based on their size categories.
+
+    The separation depends primarily on the size of the preceding aircraft (wake turbulence
+    and wake vortex strength) and, to a lesser extent, the following aircraft. Adjust the
+    table values to match your operational requirements.
+    """
+
+    prev = str(prev_size).lower()
+    curr = str(curr_size).lower()
+
+    table = {
+        ("small", "small"): 2,
+        ("small", "medium"): 3,
+        ("small", "large"): 4,
+
+        ("medium", "small"): 3,
+        ("medium", "medium"): 4,
+        ("medium", "large"): 5,
+
+        ("large", "small"): 4,
+        ("large", "medium"): 5,
+        ("large", "large"): 7,
+    }
+
+    base = table.get((prev, curr), 4)
+
+    return base
+
 def compute_multi_objectives(individual):
     """
     Compute the objective values for an Individual.
@@ -344,17 +374,19 @@ def compute_multi_objectives(individual):
     occupants_delayed = 0
     
 
-    schedule = [Plane(x.arrival, x.occupants, x.time_taken, x.plane_type) for x in individual.genome]
+    schedule = [Plane(x.arrival, x.occupants, x.plane_type) for x in individual.genome]
 
     for i in range(len(schedule)):
         if i == 0:
             schedule[i].time_landed = schedule[i].arrival
 
         else:
-            if schedule[i].arrival >= schedule[i - 1].time_landed + schedule[i - 1].time_taken:
+            # compute required separation based on previous/current plane sizes
+            req_sep = separation_time(schedule[i - 1].plane_type, schedule[i].plane_type)
+            if schedule[i].arrival >= schedule[i - 1].time_landed + req_sep:
                 schedule[i].time_landed = schedule[i].arrival
             else:
-                schedule[i].time_landed = schedule[i - 1].time_landed + schedule[i - 1].time_taken
+                schedule[i].time_landed = schedule[i - 1].time_landed + req_sep
 
         # compute delay for this plane (0 if on time)
         this_delay = max(0, schedule[i].time_landed - schedule[i].arrival)
@@ -363,6 +395,14 @@ def compute_multi_objectives(individual):
             occupants_delayed += schedule[i].occupants
 
     return total_delay, occupants_delayed
+
+
+def minutes_to_military(minutes):
+    """Convert minutes-since-midnight to HH:MM string."""
+    minutes = int(minutes)
+    hrs = (minutes // 60) % 24
+    mins = minutes % 60
+    return f"{hrs:02d}:{mins:02d}"
 
 def permutation(pop_size, planes_list):
     """
@@ -383,3 +423,114 @@ def permutation(pop_size, planes_list):
         population.append(Individual(genome))
 
     return population
+
+def main():
+    # Generate a larger set of planes.
+    num_planes = 50
+    interval = 10  # minutes between scheduled arrivals
+    sizes = ["Small", "Medium", "Large"]
+
+    # seed for reproducible occupant numbers
+    random.seed(42)
+
+    planes = []
+    for i in range(num_planes):
+        arrival = i * interval
+        arrival = max(0, i * interval)
+        size = sizes[i % len(sizes)]
+        occupants = random.randint(40, 220)
+        planes.append(Plane(arrival, occupants, size))
+    # GA parameters you can tune
+    pop_size = 30
+    generations = 100000
+    crossover_prob = 0.9
+    mutation_prob = 0.2
+
+    # initialize population
+    population = permutation(pop_size, planes)
+
+    # evaluate initial population
+    for ind in population:
+        ind.objectives = compute_multi_objectives(ind)
+
+    # evolutionary loop
+    for gen in range(1, generations + 1):
+        # ensure Pareto front ranks and crowding distances are set before selection
+        fronts = compute_pareto_fronts(population)
+        for f in fronts:
+            # compute_crowding_distance sets .crowding on members
+            _ = compute_crowding_distance(f)
+
+        offspring = []
+
+        # create offspring until we have pop_size children
+        while len(offspring) < pop_size:
+            parent1 = parent_selection(population)
+            parent2 = parent_selection(population)
+
+            if random.random() <= crossover_prob:
+                child1, child2 = partially_mapped_crossover(parent1, parent2)
+            else:
+                child1 = Individual(parent1.genome.copy())
+                child2 = Individual(parent2.genome.copy())
+
+            # mutation
+            if random.random() <= mutation_prob:
+                child1 = swap_mutation(child1)
+            if random.random() <= mutation_prob:
+                child2 = swap_mutation(child2)
+
+            offspring.extend([child1, child2])
+
+        # trim offspring to desired size
+        offspring = offspring[:pop_size]
+
+        # survivor selection
+        population = survivor_selection(offspring, pop_size, population)
+
+        # print progress every 50 generations
+        if gen % 50 == 0 or gen == 1 or gen == generations:
+            # evaluate and show best front summary
+            for ind in population:
+                ind.objectives = compute_multi_objectives(ind)
+            fronts = compute_pareto_fronts(population)
+            best_front = fronts[0]
+            print(f"Generation {gen}: Best front size={len(best_front)}, sample objectives={best_front[0].objectives}")
+        if best_front[0].objectives[0] == 0 and best_front[0].objectives[1] == 0:
+            print(f"Optimal solution found at generation {gen}.")
+            break
+
+    # final evaluation and print full fronts
+    for ind in population:
+        ind.objectives = compute_multi_objectives(ind)
+
+    sorted_population = compute_pareto_fronts(population)
+
+    for front in sorted_population:
+        sorted_front = compute_crowding_distance(front)
+        print(f"Front {front[0].front}:")
+        for ind in sorted_front:
+            print(f"Objectives: {ind.objectives}, Crowding Distance: {ind.crowding}")
+        # Print detailed schedule for the best individual in this front
+        if len(sorted_front) > 0:
+            best = sorted_front[0]
+            schedule = [Plane(x.arrival, x.occupants, x.plane_type) for x in best.genome]
+            # compute landing times using separation_time
+            for i in range(len(schedule)):
+                if i == 0:
+                    schedule[i].time_landed = schedule[i].arrival
+                else:
+                    req_sep = separation_time(schedule[i-1].plane_type, schedule[i].plane_type)
+                    if schedule[i].arrival >= schedule[i-1].time_landed + req_sep:
+                        schedule[i].time_landed = schedule[i].arrival
+                    else:
+                        schedule[i].time_landed = schedule[i-1].time_landed + req_sep
+
+            print("Schedule (arrival -> landed) and per-plane delay:")
+            for p in schedule:
+                arrival_s = minutes_to_military(p.arrival)
+                landed_s = minutes_to_military(p.time_landed) if p.time_landed is not None else "--:--"
+                delay = max(0, p.time_landed - p.arrival) if p.time_landed is not None else 0
+                print(f"  {arrival_s} -> {landed_s} | Delay: {delay} min | Type: {p.plane_type}, Occupants: {p.occupants}")
+
+main()
